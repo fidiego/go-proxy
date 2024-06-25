@@ -13,7 +13,7 @@ RUN go mod download
 COPY . /app/
 
 # build the go binary
-RUN CGO_ENABLED=0 GOOS=linux go build -v -o /app/go-proxy /app/cmd/web/
+RUN CGO_ENABLED=0 GOOS=linux go build -o /app/go-proxy /app/cmd/web/
 
 # From scratch
 FROM scratch
