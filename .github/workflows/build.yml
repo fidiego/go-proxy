@@ -15,12 +15,10 @@ jobs:
           go-version: ${{ matrix.go-version }}
       - name: Display Go version
         run: go version
-      - name: Display Docker Creds version
-        run: echo ${{ env.DOCKERHUB_USERNAME }}
+      - name: Log in to docker registry
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      - name: Log in to docker registry
-        uses: docker/login-action@v3
       - name: Run Build Script
         run: ./scripts/build.sh
