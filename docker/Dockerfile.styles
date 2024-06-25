@@ -1,0 +1,16 @@
+# vim: syntax=dockerfile
+
+# FROM node:22.3.9-buster-slim
+FROM node@sha256:1cb6af2c286dc3c6eb8973b116853729d0d4d5130a845efc03ac18920772ecfe
+
+ENV NPM_CONFIG_PROGRESS false
+ENV NPM_CONFIG_SPIN false
+ENV NPM_CONFIG_CACHE /code/.npm
+
+WORKDIR /code
+
+RUN npx tailwindcss
+
+COPY . /code
+
+CMD ["npx", "tailwindcss", "-i", "./ui/src/css/index.css",  "-o", "./ui/static/css/index.css", "--watch"]

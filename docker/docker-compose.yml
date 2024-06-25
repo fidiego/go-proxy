@@ -1,0 +1,26 @@
+services:
+  web:
+    command: ["gowatch","-p", "/app/cmd/web/main.go"]
+    stdin_open: true
+    tty: true
+    volumes:
+      - ..:/app
+    ports:
+      - 8080:8080
+    build:
+      context: ..
+      dockerfile: ./docker/Dockerfile.dev
+    environment:
+      - SERVICE_NAME="go-proxy-dev"
+      - BASE_URL=localhost
+      - PORT=8080
+      - DEBUG=True
+      - HTTPS=False
+      - ENVIRONMENT=development
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "localhost:8080/ping"]
+      interval: 15s
+      retries: 3
+      start_period: 45s
+      timeout: 2s

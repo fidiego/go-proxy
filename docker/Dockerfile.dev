@@ -1,0 +1,23 @@
+# vim: set syntax=dockerfile
+# Dockerfile for golang development
+FROM golang:1.22.3-bullseye
+
+# install gowatch (dev only)
+RUN go install github.com/silenceper/gowatch@v1.5.3
+
+# set workdir
+WORKDIR /app
+
+
+RUN echo "$GOPATH"
+RUN which gowatch
+
+# install dependencies
+COPY go.mod /app/
+RUN go mod download
+
+# copy source code
+COPY . /app/
+
+# run the server
+CMD ["gowatch", "/app/cmd/server/main.go"]
