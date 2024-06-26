@@ -16,7 +16,7 @@ COPY . /app/
 RUN CGO_ENABLED=0 GOOS=linux go build -o /app/go-proxy /app/cmd/web/
 
 # From scratch
-FROM scratch
+FROM gcr.io/distroless/base
 COPY --from=builder /app/go-proxy /usr/local/bin/go-proxy
 EXPOSE 8080
 
