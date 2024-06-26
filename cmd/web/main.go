@@ -2,10 +2,12 @@ package main
 
 import (
 	"fmt"
+	"html/template"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
+	"os"
 
 	"go-proxy/internal/config"
 
@@ -17,8 +19,28 @@ import (
 // Request Handlers
 //
 
-// pingHandler function  
+func indexHandler(w http.ResponseWriter, r *http.Request) {
+	// index page
+	buff, err := os.ReadFile("internal/templates/index.html")
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(fmt.Sprintf("Error: %v", err)))
+		return
+	}
+
+	t, err := template.New("index").Parse(string(buff))
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte(fmt.Sprintf("Error: %v", err)))
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	t.Execute(w, nil)
+}
+
 func pingHandler(w http.ResponseWriter, r *http.Request) {
+	// ping handler for healthchecks etc
 	w.WriteHeader(http.StatusOK)
 	w.Write([]byte("pong"))
 }
@@ -77,6 +99,7 @@ func main() {
 	// register routes
 	router.Get("/ping", pingHandler)
 	router.Get("/proxy", proxyHandler)
+	router.Get("/", indexHandler)
 
 	// set up the server
 	address := fmt.Sprintf(":%d", port)
