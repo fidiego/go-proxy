@@ -1,13 +1,14 @@
 package main
 
 import (
+	"embed"
 	"fmt"
+
 	"html/template"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
-	"os"
 
 	"go-proxy/internal/config"
 
@@ -19,16 +20,20 @@ import (
 // Request Handlers
 //
 
+//go:embed index.html
+var buff embed.FS
+
 func indexHandler(w http.ResponseWriter, r *http.Request) {
 	// index page
-	buff, err := os.ReadFile("internal/templates/index.html")
+
+	data, err := buff.ReadFile("index.html")
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(fmt.Sprintf("Error: %v", err)))
 		return
 	}
 
-	t, err := template.New("index").Parse(string(buff))
+	t, err := template.New("index").Parse(string(data))
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte(fmt.Sprintf("Error: %v", err)))
