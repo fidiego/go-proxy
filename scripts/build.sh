@@ -6,7 +6,7 @@ set -u
 
 
 COMMIT=$(git rev-parse --short HEAD)
-IMAGE=sayheytofred/go-proxy
+IMAGE="sayheytofred/go-proxy"
 
 
 # check if the git repo is dirty
