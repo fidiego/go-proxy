@@ -11,13 +11,19 @@ import (
 	"os"
 )
 
-const usage string = `go-proxy
+const usage string = `Usage:
 
-a cli utility to proxy requests to a given url. relies on the server included in this project.
-expects the server to be deployed at a known location.
-the server is configurable via the --server flag.
+    go-proxy [--server localhost:8080] --url http://example.com
 
-go-proxy --server localhost:8080 proxy --url http://example.com
+CLI utility to proxy requests to a given url. relies on the server included in
+this project. Expects the server to be deployed at a known location. the server
+is configurable via the --server flag.
+
+The server can also be configured in a yaml file at ~/.config/go-proxy.
+
+Options:
+    -s, --server  Specify which go-proxy server to use.
+    -u, --url     Specify the URL to fetch.
 `
 
 func proxyRequest(server string, address string) {
@@ -63,7 +69,13 @@ func main() {
 	flag.Usage = func() { fmt.Fprintf(os.Stderr, "%s\n", usage) }
 	if len(os.Args) == 1 {
 		flag.Usage()
+		return
 	}
+
+	// TODO: add config file loading and env var loading (GO_PROXY_*)
+	// var (
+	// 	configServer string
+	// )
 
 	var (
 		flagServer string
@@ -72,7 +84,7 @@ func main() {
 	)
 	flag.StringVar(&flagServer, "server", "http://localhost:8080", "The go-proxy server to proxy requests via.")
 	flag.BoolVar(&flagProxy, "p", false, "Proxy a request to the given url.")
-	flag.BoolVar(&flagProxy, "proxy", false, "Proxy a request to the given url.")
+	flag.BoolVar(&flagProxy, "proxy", true, "Proxy a request to the given url.")
 	flag.StringVar(&flagURL, "u", "https://example.com", "The requested url.")
 	flag.StringVar(&flagURL, "url", "https://example.com", "The requested url.")
 	flag.Parse()
