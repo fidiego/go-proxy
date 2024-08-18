@@ -18,6 +18,11 @@ services:
       - HTTPS=False
       - ENVIRONMENT=development
     restart: always
+    develop:
+      watch:
+        - action: rebuild
+          path: ..
+          target: /app
     healthcheck:
       test: ["CMD", "curl", "localhost:8080/ping"]
       interval: 15s

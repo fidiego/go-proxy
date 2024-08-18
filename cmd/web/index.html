@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta http-equiv="X-UA-Compatible" content="ie=edge" />
     <title>Go-Proxy</title>
+    <script src="https://unpkg.com/htmx.org@2.0.2"></script>
     <link
       rel="stylesheet"
       href="https://cdn.jsdelivr.net/npm/@exampledev/new.css@1.1.2/new.min.css"
@@ -19,20 +20,31 @@
       <p>Super simple HTTP Proxy. Only supports <code>GET</code> requests.</p>
 
       <section>
-      <h2>Try It</h2>
-      <form method="GET" action="/proxy" target="_blank">
-        <input type="text" name="url" id="url" style="width: 100%;"></input>
-        <input type="submit"></input>
-      </form>
+        <h2>Proxy</h2>
+        <form method="GET" action="/proxy" target="_blank">
+          <input type="text" name="url" id="url" style="width: 100%" />
+          <input type="submit" />
+        </form>
       </section>
 
       <section>
-      <h2>Usage</h2>
-      <pre>curl ${go-proxy-server-url}/proxy?url=https://www.example.com</pre>
+        <h2>Redirect Inspector</h2>
+        <form hx-get="/redirect" hx-target="#redirect-results">
+          <input type="text" name="url" id="url" style="width: 100%" />
+          <input type="submit" />
+        </form>
+        <div id="redirect-results"></div>
       </section>
 
-      <h2>Usage</h2>
+      <section>
+        <h2>Usage</h2>
+        <pre>curl ${go-proxy-server-url}/proxy?url=https://www.example.com</pre>
+      </section>
     </article>
+    <script
+      defer
+      src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"
+    ></script>
   </body>
   <footer>
     <a href="//github.com/fidiego/go-proxy">GitHub</a>

@@ -1,0 +1,17 @@
+<ul id="redirect-list">
+  {{ range . }}
+  <li id="{{ .Url }}">
+    <h4>{{ .Url }}</h4>
+    <table>
+      <tr>
+        <td>Status Code</td>
+        <td>{{ .Status }}</td>
+      <tr>
+      </tr>
+        <td>URL</td>
+        <td><a href="{{ .Url }}">{{ .Url }}</a></td>
+      </tr>
+    </table>
+  </li>
+  {{ end }}
+</ul>
