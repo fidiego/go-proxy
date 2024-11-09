@@ -1,17 +1,13 @@
-<ul id="redirect-list">
+<h4>Redirections</h4>
+<table>
+  <tr>
+    <td><b>Status</b></td>
+    <td><b>URL</b></td>
+  </tr>
   {{ range . }}
-  <li id="{{ .Url }}">
-    <h4>{{ .Url }}</h4>
-    <table>
-      <tr>
-        <td>Status Code</td>
-        <td>{{ .Status }}</td>
-      <tr>
-      </tr>
-        <td>URL</td>
-        <td><a href="{{ .Url }}">{{ .Url }}</a></td>
-      </tr>
-    </table>
-  </li>
+  <tr id="{{ .Url }}">
+    <td>{{ .Status }}</td>
+    <td><a href="{{ .Url }}">{{ .Url }}</a></td>
+  </tr>
   {{ end }}
-</ul>
+</table>
