@@ -1,13 +1,59 @@
-<h4>Redirections</h4>
-<table>
-  <tr>
-    <td><b>Status</b></td>
-    <td><b>URL</b></td>
-  </tr>
-  {{ range . }}
-  <tr id="{{ .Url }}">
-    <td>{{ .Status }}</td>
-    <td><a href="{{ .Url }}">{{ .Url }}</a></td>
-  </tr>
+{{- /* Rendered by redirectHandler with a RedirectTrace. Swapped into #redirect-results by htmx. */ -}}
+<div class="trace">
+  {{ if .Error }}
+  <div class="notice notice-err" role="alert">
+    <svg aria-hidden="true" viewBox="0 0 20 20" width="18" height="18"><path fill="currentColor" d="M10 1.5a8.5 8.5 0 1 0 0 17 8.5 8.5 0 0 0 0-17Zm0 4a1 1 0 0 1 1 1v4.2a1 1 0 1 1-2 0V6.5a1 1 0 0 1 1-1Zm0 8a1.1 1.1 0 1 1 0 2.2 1.1 1.1 0 0 1 0-2.2Z"/></svg>
+    <div>
+      <strong>Trace failed</strong>
+      <p>{{ .Error }}</p>
+    </div>
+  </div>
   {{ end }}
-</table>
+
+  {{ if .Hops }}
+  <div class="trace-summary">
+    <span class="trace-summary-main">
+      {{ with .FinalHop }}<span class="pill pill-{{ .StatusClass }}">{{ .Status }}</span>{{ end }}
+      <span class="trace-summary-text">
+        {{ if eq .Redirects 0 }}No redirects <span class="muted">· answered directly</span>
+        {{ else if eq .Redirects 1 }}1 redirect
+        {{ else }}{{ .Redirects }} redirects{{ end }}
+      </span>
+    </span>
+    <span class="trace-summary-meta">{{ .ElapsedMs }} ms</span>
+  </div>
+
+  <ol class="hops">
+    {{ range $i, $hop := .Hops }}
+    <li class="hop {{ if $hop.Final }}hop-final{{ end }}">
+      <div class="hop-rail" aria-hidden="true"><span class="hop-dot"></span></div>
+      <div class="hop-body">
+        <div class="hop-head">
+          <span class="pill pill-{{ $hop.StatusClass }}">{{ $hop.Status }}</span>
+          <span class="hop-step">{{ if $hop.Final }}Final{{ else if eq $i 0 }}Start{{ else }}Hop {{ $i }}{{ end }}</span>
+        </div>
+        <a class="hop-url" href="{{ $hop.Url }}" target="_blank" rel="noopener noreferrer">{{ $hop.Url }}</a>
+        {{ if $hop.Location }}
+        <div class="hop-location"><span class="hop-location-label">Location</span> <span>{{ $hop.Location }}</span></div>
+        {{ end }}
+        {{ if $hop.Headers }}
+        <details class="hop-headers">
+          <summary>Headers <span class="muted">({{ len $hop.Headers }})</span></summary>
+          <dl>
+            {{ range $k, $vals := $hop.Headers }}
+            <dt>{{ $k }}</dt>
+            <dd>{{ range $j, $v := $vals }}{{ if $j }}<br>{{ end }}{{ $v }}{{ end }}</dd>
+            {{ end }}
+          </dl>
+        </details>
+        {{ end }}
+      </div>
+    </li>
+    {{ end }}
+  </ol>
+  {{ else if not .Error }}
+  <div class="empty">
+    <p>Nothing came back for <code>{{ .Target }}</code>.</p>
+  </div>
+  {{ end }}
+</div>

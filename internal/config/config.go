@@ -36,7 +36,7 @@ func get_int_env(name string, default_value int) int {
 	}
 	parsed, err := strconv.Atoi(raw_value)
 	if err != nil {
-		log.Fatal("Invalid value found for %s, falling back to default: %v", name, default_value)
+		log.Fatalf("Invalid value found for %s: %v", name, err)
 	}
 	return parsed
 }

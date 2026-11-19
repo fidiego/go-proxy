@@ -48,7 +48,7 @@ func proxyRequest(server string, address string) {
 	requestUrl.RawQuery = q.Encode()
 	requestUrl.Path = "/proxy"
 
-	fmt.Println("Preparing to make request: %v", requestUrl.String())
+	fmt.Printf("Preparing to make request: %v\n", requestUrl.String())
 
 	// make request
 	resp, err := http.Get(requestUrl.String())

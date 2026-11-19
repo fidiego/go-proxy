@@ -9,7 +9,7 @@ primary_region = 'ord'
 [build]
   dockerfile = "docker/Dockerfile"
   [build.args]
-    GO_VERSION = '1.22.3'
+    GO_VERSION = '1.27.4'
 
 [env]
   PORT = '8080'

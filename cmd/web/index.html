@@ -2,57 +2,369 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta http-equiv="X-UA-Compatible" content="ie=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f6f7f9" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0f1115" media="(prefers-color-scheme: dark)" />
+    <meta name="description" content="Go-Proxy: a tiny HTTP GET proxy and redirect inspector." />
+    <!-- let htmx swap error responses (4xx/5xx) so the inspector can show them -->
+    <meta name="htmx-config" content='{"responseHandling":[{"code":".*","swap":true}]}' />
     <title>Go-Proxy</title>
-    <script src="https://unpkg.com/htmx.org@2.0.2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/htmx.org@2.0.11/dist/htmx.min.js" crossorigin="anonymous"></script>
     <style>
-      .my-indicator{display:none;}
-      .htmx-request .my-indicator{display:inline;}
-      .htmx-request.my-indicator{display:inline;}
+      :root {
+        --bg: #f6f7f9;
+        --surface: #ffffff;
+        --surface-2: #f0f2f5;
+        --border: #e2e5ea;
+        --text: #15181d;
+        --text-2: #5c6470;
+        --text-3: #8a92a0;
+        --accent: #2f6df6;
+        --accent-text: #ffffff;
+        --accent-soft: #e8efff;
+        --ok: #1a7f4b;
+        --ok-soft: #e3f5eb;
+        --redir: #2f6df6;
+        --redir-soft: #e8efff;
+        --warn: #a85f00;
+        --warn-soft: #fff1dc;
+        --err: #c2362f;
+        --err-soft: #fdeae8;
+        --code-bg: #eef0f3;
+        --radius: 12px;
+        --radius-sm: 8px;
+        --shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 1px 3px rgba(16, 24, 40, 0.06);
+        --focus: 0 0 0 3px rgba(47, 109, 246, 0.35);
+        --mono: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+        --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, Helvetica, Arial, sans-serif;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root:not([data-theme="light"]) {
+          --bg: #0f1115;
+          --surface: #171a20;
+          --surface-2: #1f232b;
+          --border: #2a2f39;
+          --text: #e9ecf1;
+          --text-2: #a4acb9;
+          --text-3: #727b89;
+          --accent: #6b97ff;
+          --accent-text: #0b1120;
+          --accent-soft: #1b2744;
+          --ok: #5fd08f;
+          --ok-soft: #14301f;
+          --redir: #8fb0ff;
+          --redir-soft: #1b2744;
+          --warn: #f1b45c;
+          --warn-soft: #3a2a10;
+          --err: #ff7b72;
+          --err-soft: #3d1a18;
+          --code-bg: #1f232b;
+          --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+          --focus: 0 0 0 3px rgba(107, 151, 255, 0.45);
+        }
+      }
+      :root[data-theme="dark"] {
+        --bg: #0f1115;
+        --surface: #171a20;
+        --surface-2: #1f232b;
+        --border: #2a2f39;
+        --text: #e9ecf1;
+        --text-2: #a4acb9;
+        --text-3: #727b89;
+        --accent: #6b97ff;
+        --accent-text: #0b1120;
+        --accent-soft: #1b2744;
+        --ok: #5fd08f;
+        --ok-soft: #14301f;
+        --redir: #8fb0ff;
+        --redir-soft: #1b2744;
+        --warn: #f1b45c;
+        --warn-soft: #3a2a10;
+        --err: #ff7b72;
+        --err-soft: #3d1a18;
+        --code-bg: #1f232b;
+        --shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+        --focus: 0 0 0 3px rgba(107, 151, 255, 0.45);
+      }
+
+      * { box-sizing: border-box; }
+      html { -webkit-text-size-adjust: 100%; }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--text);
+        font-family: var(--sans);
+        font-size: 16px;
+        line-height: 1.5;
+        -webkit-font-smoothing: antialiased;
+        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+      }
+      a { color: var(--accent); }
+      code, pre, .mono { font-family: var(--mono); }
+      code { background: var(--code-bg); padding: 0.1em 0.35em; border-radius: 4px; font-size: 0.9em; }
+      pre {
+        background: var(--code-bg);
+        border-radius: var(--radius-sm);
+        padding: 12px 14px;
+        margin: 0;
+        overflow-x: auto;
+        font-size: 13px;
+        line-height: 1.55;
+        -webkit-overflow-scrolling: touch;
+      }
+      .muted { color: var(--text-3); font-weight: 400; }
+
+      /* layout */
+      .wrap { max-width: 720px; margin: 0 auto; padding: 0 16px; }
+      .topbar {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 14px 0 6px;
+      }
+      .brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; font-size: 18px; color: var(--text); text-decoration: none; letter-spacing: -0.01em; }
+      .brand-mark { width: 28px; height: 28px; border-radius: 8px; background: var(--accent); color: var(--accent-text); display: grid; place-items: center; }
+      .topbar-links { display: flex; gap: 6px; }
+      .icon-btn {
+        display: inline-grid; place-items: center; width: 40px; height: 40px;
+        border-radius: 10px; color: var(--text-2); text-decoration: none;
+        background: transparent; border: 0; cursor: pointer;
+      }
+      .icon-btn:hover { background: var(--surface-2); color: var(--text); }
+      .icon-btn:focus-visible { outline: none; box-shadow: var(--focus); }
+
+      .hero { padding: 20px 0 8px; }
+      .hero h1 { margin: 0 0 6px; font-size: 28px; line-height: 1.2; letter-spacing: -0.02em; }
+      .hero p { margin: 0; color: var(--text-2); font-size: 15px; }
+
+      main { display: grid; gap: 16px; padding: 12px 0 32px; }
+
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: var(--radius);
+        box-shadow: var(--shadow);
+        padding: 18px 16px;
+        min-width: 0; /* grid item: don't let wide <pre> content stretch the column */
+      }
+      .card h2 { margin: 0 0 4px; font-size: 17px; letter-spacing: -0.01em; }
+      .card .lead { margin: 0 0 14px; color: var(--text-2); font-size: 14px; }
+
+      /* forms: stacked on phones, inline from 560px */
+      .url-form { display: grid; gap: 10px; }
+      .url-form label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+      .url-form input[type="url"] {
+        width: 100%; min-height: 48px;
+        padding: 0 14px;
+        font: inherit; font-size: 16px; /* 16px prevents iOS zoom on focus */
+        color: var(--text);
+        background: var(--surface-2);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        -webkit-appearance: none; appearance: none;
+      }
+      .url-form input[type="url"]::placeholder { color: var(--text-3); }
+      .url-form input[type="url"]:focus { outline: none; border-color: var(--accent); box-shadow: var(--focus); background: var(--surface); }
+      .btn {
+        display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+        min-height: 48px; padding: 0 18px;
+        font: inherit; font-size: 15px; font-weight: 600;
+        color: var(--accent-text); background: var(--accent);
+        border: 0; border-radius: 10px; cursor: pointer;
+        -webkit-tap-highlight-color: transparent;
+        transition: filter 120ms ease, transform 80ms ease;
+      }
+      .btn:hover { filter: brightness(1.05); }
+      .btn:active { transform: translateY(1px); }
+      .btn:focus-visible { outline: none; box-shadow: var(--focus); }
+      .btn:disabled { opacity: 0.6; cursor: progress; }
+      .btn .spinner { display: none; width: 16px; height: 16px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin 0.7s linear infinite; }
+      .htmx-request .btn .spinner, .btn.htmx-request .spinner { display: inline-block; }
+      .htmx-request .btn .btn-label-idle { display: none; }
+      .btn .btn-label-busy { display: none; }
+      .htmx-request .btn .btn-label-busy { display: inline; }
+      @keyframes spin { to { transform: rotate(360deg); } }
+      @media (min-width: 560px) {
+        .url-form { grid-template-columns: 1fr auto; }
+      }
+      .hint { margin: 10px 0 0; font-size: 13px; color: var(--text-3); }
+
+      /* results */
+      #redirect-results { margin-top: 14px; }
+      .empty {
+        display: grid; justify-items: center; text-align: center; gap: 6px;
+        padding: 22px 12px; color: var(--text-2);
+        border: 1px dashed var(--border); border-radius: var(--radius-sm);
+      }
+      .empty svg { color: var(--text-3); }
+      .empty p { margin: 0; font-size: 14px; }
+
+      .notice {
+        display: flex; gap: 10px; align-items: flex-start;
+        padding: 12px 14px; border-radius: var(--radius-sm);
+        border: 1px solid var(--border); margin-bottom: 12px;
+      }
+      .notice strong { display: block; font-size: 14px; }
+      .notice p { margin: 2px 0 0; font-size: 14px; color: var(--text-2); word-break: break-word; }
+      .notice-err { background: var(--err-soft); border-color: color-mix(in srgb, var(--err) 40%, transparent); color: var(--err); }
+      .notice-err p { color: var(--text); }
+      .notice svg { flex: none; margin-top: 2px; }
+
+      .trace-summary {
+        display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px;
+        padding: 10px 12px; margin-bottom: 12px;
+        background: var(--surface-2); border-radius: var(--radius-sm);
+        font-size: 14px;
+      }
+      .trace-summary-main { display: inline-flex; align-items: center; gap: 8px; flex: 1 1 auto; min-width: 0; }
+      .trace-summary-text { font-weight: 600; }
+      .trace-summary-meta { margin-left: auto; color: var(--text-3); font-family: var(--mono); font-size: 13px; white-space: nowrap; }
+
+      .pill {
+        display: inline-flex; align-items: center; min-height: 24px;
+        padding: 0 8px; border-radius: 999px;
+        font-family: var(--mono); font-size: 13px; font-weight: 600; line-height: 1;
+        background: var(--surface-2); color: var(--text-2);
+      }
+      .pill-ok { background: var(--ok-soft); color: var(--ok); }
+      .pill-redir { background: var(--redir-soft); color: var(--redir); }
+      .pill-warn { background: var(--warn-soft); color: var(--warn); }
+      .pill-err { background: var(--err-soft); color: var(--err); }
+
+      .hops { list-style: none; margin: 0; padding: 0; }
+      .hop { display: grid; grid-template-columns: 20px 1fr; gap: 0 10px; }
+      .hop-rail { position: relative; }
+      .hop-rail::before {
+        content: ""; position: absolute; left: 9px; top: 0; bottom: 0; width: 2px;
+        background: var(--border);
+      }
+      .hop:first-child .hop-rail::before { top: 14px; }
+      .hop:last-child .hop-rail::before { bottom: auto; height: 14px; }
+      .hop:only-child .hop-rail::before { display: none; }
+      .hop-dot {
+        position: absolute; left: 4px; top: 8px; width: 12px; height: 12px;
+        border-radius: 50%; background: var(--surface); border: 2px solid var(--text-3);
+      }
+      .hop-final .hop-dot { border-color: var(--ok); background: var(--ok); }
+      .hop-body { padding: 4px 0 18px; min-width: 0; }
+      .hop:last-child .hop-body { padding-bottom: 4px; }
+      .hop-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+      .hop-step { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--text-3); }
+      .hop-url {
+        display: block; font-family: var(--mono); font-size: 14px;
+        color: var(--text); text-decoration: none;
+        word-break: break-all; overflow-wrap: anywhere;
+      }
+      .hop-url:hover { text-decoration: underline; color: var(--accent); }
+      .hop-location { margin-top: 4px; font-size: 13px; color: var(--text-2); word-break: break-all; overflow-wrap: anywhere; font-family: var(--mono); }
+      .hop-location-label { color: var(--text-3); font-family: var(--sans); font-size: 12px; text-transform: uppercase; letter-spacing: 0.04em; margin-right: 4px; }
+      .hop-headers { margin-top: 8px; }
+      .hop-headers summary {
+        cursor: pointer; font-size: 13px; color: var(--text-2);
+        min-height: 32px; display: inline-flex; align-items: center; gap: 4px;
+        -webkit-tap-highlight-color: transparent; user-select: none;
+      }
+      .hop-headers summary:hover { color: var(--text); }
+      .hop-headers dl {
+        margin: 6px 0 0; padding: 10px 12px;
+        background: var(--code-bg); border-radius: var(--radius-sm);
+        display: grid; grid-template-columns: 1fr; gap: 8px 12px;
+        font-size: 12.5px; font-family: var(--mono);
+      }
+      .hop-headers dt { color: var(--text-2); font-weight: 600; word-break: break-all; }
+      .hop-headers dd { margin: 0 0 4px; word-break: break-all; overflow-wrap: anywhere; color: var(--text); }
+      @media (min-width: 560px) {
+        .hop-headers dl { grid-template-columns: minmax(140px, max-content) 1fr; gap: 6px 16px; }
+        .hop-headers dd { margin: 0; }
+      }
+
+      footer { padding: 8px 0 28px; color: var(--text-3); font-size: 13px; display: flex; gap: 12px; flex-wrap: wrap; }
+      footer a { color: var(--text-2); }
+
+      @media (prefers-reduced-motion: reduce) {
+        .btn { transition: none; }
+        .btn .spinner { animation-duration: 1.5s; }
+      }
     </style>
-    <link
-      rel="stylesheet"
-      href="https://cdn.jsdelivr.net/npm/@exampledev/new.css@1.1.2/new.min.css"
-    />
-    <link rel="stylesheet" href="https://newcss.net/theme/terminal.css" />
   </head>
   <body>
-    <header>
-      <h1>Go-Proxy</h1>
-    </header>
-    <article>
-      <p>Super simple HTTP Proxy. Only supports <code>GET</code> requests.</p>
+    <div class="wrap">
+      <header class="topbar">
+        <a class="brand" href="/">
+          <span class="brand-mark" aria-hidden="true">
+            <svg viewBox="0 0 20 20" width="16" height="16"><path fill="currentColor" d="M3 5.5A1.5 1.5 0 0 1 4.5 4h5a1 1 0 0 1 0 2H5v8h10v-4.5a1 1 0 1 1 2 0v5a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 3 14.5v-9Zm9-1.5h4a1 1 0 0 1 1 1v4a1 1 0 1 1-2 0V7.4l-4.3 4.3a1 1 0 0 1-1.4-1.4L13.6 6H12a1 1 0 1 1 0-2Z"/></svg>
+          </span>
+          Go-Proxy
+        </a>
+        <nav class="topbar-links" aria-label="Links">
+          <a class="icon-btn" href="https://github.com/fidiego/go-proxy" target="_blank" rel="noopener noreferrer" aria-label="GitHub repository" title="GitHub">
+            <svg viewBox="0 0 16 16" width="20" height="20" aria-hidden="true"><path fill="currentColor" d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+          </a>
+        </nav>
+      </header>
 
-      <section>
-        <h2>Proxy</h2>
-        <form method="GET" action="/proxy" target="_blank">
-          <input type="text" name="url" id="url" style="width: 100%" />
-          <input type="submit" />
-        </form>
+      <section class="hero">
+        <h1>Fetch and inspect URLs</h1>
+        <p>A tiny HTTP proxy for <code>GET</code> requests, plus a redirect inspector that shows every hop.</p>
       </section>
 
-      <section>
-        <h2>Redirect Inspector</h2>
-        <form hx-get="/redirect" hx-target="#redirect-results" hx-indicator="#spinner">
-          <input type="text" name="url" id="url" style="width: 100%" />
-          <input type="submit" />
-          <img  id="spinner" class="htmx-indicator" src="data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYiIGhlaWdodD0iMTYiIHZpZXdCb3g9IjAgMCAxMzUgMTQwIiB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIGZpbGw9IiM0OTQ5NDkiPjxyZWN0IHk9IjEwIiB3aWR0aD0iMTUiIGhlaWdodD0iMTIwIiByeD0iNiI+PGFuaW1hdGUgYXR0cmlidXRlTmFtZT0iaGVpZ2h0IiBiZWdpbj0iMC41cyIgZHVyPSIxcyIgdmFsdWVzPSIxMjA7MTEwOzEwMDs5MDs4MDs3MDs2MDs1MDs0MDsxNDA7MTIwIiBjYWxjTW9kZT0ibGluZWFyIiByZXBlYXRDb3VudD0iaW5kZWZpbml0ZSIvPjxhbmltYXRlIGF0dHJpYnV0ZU5hbWU9InkiIGJlZ2luPSIwLjVzIiBkdXI9IjFzIiB2YWx1ZXM9IjEwOzE1OzIwOzI1OzMwOzM1OzQwOzQ1OzUwOzA7MTAiIGNhbGNNb2RlPSJsaW5lYXIiIHJlcGVhdENvdW50PSJpbmRlZmluaXRlIi8+PC9yZWN0PjxyZWN0IHg9IjMwIiB5PSIxMCIgd2lkdGg9IjE1IiBoZWlnaHQ9IjEyMCIgcng9IjYiPjxhbmltYXRlIGF0dHJpYnV0ZU5hbWU9ImhlaWdodCIgYmVnaW49IjAuMjVzIiBkdXI9IjFzIiB2YWx1ZXM9IjEyMDsxMTA7MTAwOzkwOzgwOzcwOzYwOzUwOzQwOzE0MDsxMjAiIGNhbGNNb2RlPSJsaW5lYXIiIHJlcGVhdENvdW50PSJpbmRlZmluaXRlIi8+PGFuaW1hdGUgYXR0cmlidXRlTmFtZT0ieSIgYmVnaW49IjAuMjVzIiBkdXI9IjFzIiB2YWx1ZXM9IjEwOzE1OzIwOzI1OzMwOzM1OzQwOzQ1OzUwOzA7MTAiIGNhbGNNb2RlPSJsaW5lYXIiIHJlcGVhdENvdW50PSJpbmRlZmluaXRlIi8+PC9yZWN0PjxyZWN0IHg9IjYwIiB3aWR0aD0iMTUiIGhlaWdodD0iMTQwIiByeD0iNiI+PGFuaW1hdGUgYXR0cmlidXRlTmFtZT0iaGVpZ2h0IiBiZWdpbj0iMHMiIGR1cj0iMXMiIHZhbHVlcz0iMTIwOzExMDsxMDA7OTA7ODA7NzA7NjA7NTA7NDA7MTQwOzEyMCIgY2FsY01vZGU9ImxpbmVhciIgcmVwZWF0Q291bnQ9ImluZGVmaW5pdGUiLz48YW5pbWF0ZSBhdHRyaWJ1dGVOYW1lPSJ5IiBiZWdpbj0iMHMiIGR1cj0iMXMiIHZhbHVlcz0iMTA7MTU7MjA7MjU7MzA7MzU7NDA7NDU7NTA7MDsxMCIgY2FsY01vZGU9ImxpbmVhciIgcmVwZWF0Q291bnQ9ImluZGVmaW5pdGUiLz48L3JlY3Q+PHJlY3QgeD0iOTAiIHk9IjEwIiB3aWR0aD0iMTUiIGhlaWdodD0iMTIwIiByeD0iNiI+PGFuaW1hdGUgYXR0cmlidXRlTmFtZT0iaGVpZ2h0IiBiZWdpbj0iMC4yNXMiIGR1cj0iMXMiIHZhbHVlcz0iMTIwOzExMDsxMDA7OTA7ODA7NzA7NjA7NTA7NDA7MTQwOzEyMCIgY2FsY01vZGU9ImxpbmVhciIgcmVwZWF0Q291bnQ9ImluZGVmaW5pdGUiLz48YW5pbWF0ZSBhdHRyaWJ1dGVOYW1lPSJ5IiBiZWdpbj0iMC4yNXMiIGR1cj0iMXMiIHZhbHVlcz0iMTA7MTU7MjA7MjU7MzA7MzU7NDA7NDU7NTA7MDsxMCIgY2FsY01vZGU9ImxpbmVhciIgcmVwZWF0Q291bnQ9ImluZGVmaW5pdGUiLz48L3JlY3Q+PHJlY3QgeD0iMTIwIiB5PSIxMCIgd2lkdGg9IjE1IiBoZWlnaHQ9IjEyMCIgcng9IjYiPjxhbmltYXRlIGF0dHJpYnV0ZU5hbWU9ImhlaWdodCIgYmVnaW49IjAuNXMiIGR1cj0iMXMiIHZhbHVlcz0iMTIwOzExMDsxMDA7OTA7ODA7NzA7NjA7NTA7NDA7MTQwOzEyMCIgY2FsY01vZGU9ImxpbmVhciIgcmVwZWF0Q291bnQ9ImluZGVmaW5pdGUiLz48YW5pbWF0ZSBhdHRyaWJ1dGVOYW1lPSJ5IiBiZWdpbj0iMC41cyIgZHVyPSIxcyIgdmFsdWVzPSIxMDsxNTsyMDsyNTszMDszNTs0MDs0NTs1MDswOzEwIiBjYWxjTW9kZT0ibGluZWFyIiByZXBlYXRDb3VudD0iaW5kZWZpbml0ZSIvPjwvcmVjdD48L3N2Zz4="/>
-        </form>
-        <div id="redirect-results"></div>
-      </section>
+      <main>
+        <section class="card" aria-labelledby="proxy-title">
+          <h2 id="proxy-title">Proxy</h2>
+          <p class="lead">Fetch a page through this server. The response opens in a new tab.</p>
+          <form class="url-form" method="GET" action="/proxy" target="_blank">
+            <label for="proxy-url">URL to fetch</label>
+            <input
+              type="url" id="proxy-url" name="url" required
+              placeholder="https://example.com"
+              inputmode="url" autocomplete="url" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go"
+            />
+            <button class="btn" type="submit">Fetch</button>
+          </form>
+        </section>
 
-      <section>
-        <h2>Usage</h2>
-        <pre>curl ${go-proxy-server-url}/proxy?url=https://www.example.com</pre>
-      </section>
-    </article>
-    <script
-      defer
-      src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"
-    ></script>
+        <section class="card" aria-labelledby="redirect-title">
+          <h2 id="redirect-title">Redirect Inspector</h2>
+          <p class="lead">Follow a URL's redirect chain and see the status code and headers at each hop.</p>
+          <form
+            class="url-form"
+            hx-get="/redirect"
+            hx-target="#redirect-results"
+            hx-swap="innerHTML"
+            hx-disabled-elt="find button"
+            hx-indicator="this"
+          >
+            <label for="redirect-url">URL to trace</label>
+            <input
+              type="url" id="redirect-url" name="url" required
+              placeholder="https://example.com"
+              inputmode="url" autocomplete="url" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="go"
+            />
+            <button class="btn" type="submit">
+              <span class="spinner" aria-hidden="true"></span>
+              <span class="btn-label-idle">Trace</span>
+              <span class="btn-label-busy">Tracing…</span>
+            </button>
+          </form>
+          <div id="redirect-results" aria-live="polite">
+            <div class="empty">
+              <svg aria-hidden="true" viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h10a4 4 0 0 1 0 8H8"/><path d="M11 11l-3 3 3 3"/><path d="M17 18h3"/></svg>
+              <p>Enter a URL above to trace its redirects.</p>
+            </div>
+          </div>
+        </section>
+
+        <section class="card" aria-labelledby="usage-title">
+          <h2 id="usage-title">Usage</h2>
+          <p class="lead">Both tools are plain <code>GET</code> endpoints, so they work from the command line too.</p>
+          <pre><code>curl "$GO_PROXY/proxy?url=https://example.com"
+curl "$GO_PROXY/redirect?url=https://example.com"</code></pre>
+        </section>
+      </main>
+
+      <footer>
+        <span>Only <code>GET</code> is supported.</span>
+        <a href="https://github.com/fidiego/go-proxy" target="_blank" rel="noopener noreferrer">Source on GitHub</a>
+      </footer>
+    </div>
   </body>
-  <footer>
-    <a href="//github.com/fidiego/go-proxy">GitHub</a>
-  </footer>
 </html>

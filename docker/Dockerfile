@@ -1,6 +1,7 @@
 # vim: set syntax=dockerfile
 # Dockerfile for golang development
-FROM golang:1.22.3-bullseye as builder
+ARG GO_VERSION=1.27.4
+FROM golang:${GO_VERSION}-bookworm AS builder
 
 # set workdir
 WORKDIR /app

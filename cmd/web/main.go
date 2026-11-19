@@ -2,13 +2,14 @@ package main
 
 import (
 	"embed"
+	"errors"
 	"fmt"
-
 	"html/template"
 	"io"
 	"log"
 	"net/http"
 	"net/url"
+	"time"
 
 	"go-proxy/internal/config"
 
@@ -20,32 +21,19 @@ import (
 // Request Handlers
 //
 
-//go:embed index.html
-var indexBuff embed.FS
+//go:embed index.html partials/*.html
+var assets embed.FS
 
-//go:embed partials/redirects.html
-var redirectsBuff embed.FS
+// templates are parsed once at startup; names are the file base names
+// ("index.html", "redirects.html").
+var templates = template.Must(template.ParseFS(assets, "index.html", "partials/*.html"))
 
 func indexHandler(w http.ResponseWriter, r *http.Request) {
 	// index page
-
-	data, err := indexBuff.ReadFile("index.html")
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(fmt.Sprintf("Error: %v", err)))
-		return
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if err := templates.ExecuteTemplate(w, "index.html", nil); err != nil {
+		log.Printf("index template error: %v", err)
 	}
-
-	t, err := template.New("index").Parse(string(data))
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(fmt.Sprintf("Error: %v", err)))
-		return
-	}
-
-	w.WriteHeader(http.StatusOK)
-	t.Execute(w, nil)
-	return
 }
 
 func pingHandler(w http.ResponseWriter, r *http.Request) {
@@ -99,103 +87,150 @@ func proxyHandler(w http.ResponseWriter, r *http.Request) {
 *
 ***/
 
-type Redirect struct {
-	Url     string              `json:"url"`
-	Status  int                 `json:"status"`
-	Headers map[string][]string `json:"headers"`
+const maxRedirects = 20
+
+// Hop is a single response in a redirect chain: the URL that was requested,
+// the status it answered with, and (for redirects) where it pointed next.
+type Hop struct {
+	Url      string      `json:"url"`
+	Status   int         `json:"status"`
+	Location string      `json:"location,omitempty"`
+	Headers  http.Header `json:"headers"`
+	Final    bool        `json:"final"`
 }
 
-func redirectPolicyFuncWrapper(redirects *[]Redirect) func(req *http.Request, via []*http.Request) error {
+// StatusClass returns a short label used by the UI to colour the status pill.
+func (h Hop) StatusClass() string {
+	switch {
+	case h.Status >= 500:
+		return "err"
+	case h.Status >= 400:
+		return "warn"
+	case h.Status >= 300:
+		return "redir"
+	case h.Status >= 200:
+		return "ok"
+	default:
+		return ""
+	}
+}
 
+// RedirectTrace is what the redirects partial renders.
+type RedirectTrace struct {
+	Target    string
+	Hops      []Hop // every response in order; the last one is the final response
+	Redirects int   // number of redirects followed (len(Hops) - 1 when successful)
+	Elapsed   time.Duration
+	Error     string
+}
+
+func (t RedirectTrace) ElapsedMs() int64 { return t.Elapsed.Milliseconds() }
+
+func (t RedirectTrace) FinalHop() *Hop {
+	if len(t.Hops) == 0 {
+		return nil
+	}
+	return &t.Hops[len(t.Hops)-1]
+}
+
+func redirectPolicyFuncWrapper(hops *[]Hop) func(req *http.Request, via []*http.Request) error {
 	return func(req *http.Request, via []*http.Request) error {
-		// stop after 20 redirects (just for kicks)
-		// for each redirect, check the status code and add to a list of Redirects
-
-		if len(via) >= 20 {
-			return fmt.Errorf("stopped after 20 redirects")
+		// called before following each redirect. req is the *next* request,
+		// req.Response is the redirect response, via[len-1] is the request that
+		// received it.
+		if len(via) >= maxRedirects {
+			return fmt.Errorf("stopped after %d redirects", maxRedirects)
 		}
-		r := &Redirect{
-			Url:     req.URL.String(),
-			Status:  req.Response.StatusCode,
-			Headers: req.Response.Header,
+		prev := via[len(via)-1]
+		hop := Hop{
+			Url:      prev.URL.String(),
+			Status:   req.Response.StatusCode,
+			Location: req.URL.String(),
+			Headers:  req.Response.Header,
 		}
-
-		*redirects = append(*redirects, *r)
-
-		log.Printf("Redirecting to %v", r)
-		log.Printf("Redirecting to %v", req.URL)
-
+		*hops = append(*hops, hop)
+		log.Printf("redirect %d: %s -> %d -> %s", len(via), hop.Url, hop.Status, hop.Location)
 		return nil
 	}
 }
 
-// take a url query parameter and trace the redirects
-// return a json response with the redirect chain
-// to do this we create a custom client with a redirect policy function.
-// the function we pass is retunred by a closure that has access to a
-// slice of Redirects. Each time the function is called, it appends the
-// current redirect to the slice.
-// we then return a marshalled version of the slice as the response.
+func renderTrace(w http.ResponseWriter, status int, trace RedirectTrace) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
+	if err := templates.ExecuteTemplate(w, "redirects.html", trace); err != nil {
+		log.Printf("redirects template error: %v", err)
+	}
+}
+
+// take a url query parameter and trace the redirects, returning an html
+// partial with the full chain (every hop plus the final response). the final
+// response is always included, so a url with zero redirects still shows its
+// status and headers.
 func redirectHandler(w http.ResponseWriter, r *http.Request) {
 	target_url := r.URL.Query().Get("url")
+	trace := RedirectTrace{Target: target_url}
+
 	// validate url (http, https)
-	url, err := url.Parse(target_url)
-	if err != nil {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Invalid URL provided. Please provide a valid url in the query string.\n\nFailed to parse provided url."))
+	if len(target_url) == 0 {
+		trace.Error = "No URL provided. Enter a URL to trace."
+		renderTrace(w, http.StatusBadRequest, trace)
 		return
 	}
-	if url.Scheme != "http" && url.Scheme != "https" {
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Invalid URL provided. Please provide a valid url in the query string.\n\nMust begin with http or https."))
+	parsed, err := url.Parse(target_url)
+	if err != nil {
+		trace.Error = "Could not parse that URL."
+		renderTrace(w, http.StatusBadRequest, trace)
+		return
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		trace.Error = "URL must begin with http:// or https://."
+		renderTrace(w, http.StatusBadRequest, trace)
 		return
 	}
 
 	log.Printf("Tracing url redirects starting with %v", target_url)
 
-	// create a slice to store the redirects
-	redirects := []Redirect{}
-	// instantiate a client
+	hops := []Hop{}
 	client := &http.Client{
-		CheckRedirect: redirectPolicyFuncWrapper(&redirects),
+		Timeout:       30 * time.Second,
+		CheckRedirect: redirectPolicyFuncWrapper(&hops),
 	}
 
-	// make the request
+	start := time.Now()
 	resp, err := client.Get(target_url)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(fmt.Sprintf("Error: %v", err)))
-		return
+	trace.Elapsed = time.Since(start)
+
+	// when CheckRedirect returns an error the client still hands back the last
+	// response (with its body closed), so we can show the partial chain.
+	if resp != nil {
+		if resp.Body != nil {
+			defer resp.Body.Close()
+		}
+		hops = append(hops, Hop{
+			Url:     resp.Request.URL.String(),
+			Status:  resp.StatusCode,
+			Headers: resp.Header,
+			Final:   err == nil,
+		})
+	}
+	// every hop is a redirect except a successful final response
+	trace.Hops = hops
+	trace.Redirects = len(hops)
+	if last := trace.FinalHop(); last != nil && last.Final {
+		trace.Redirects--
 	}
 
 	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(fmt.Sprintf("Error: %v", err)))
+		var uerr *url.Error
+		if errors.As(err, &uerr) {
+			err = uerr.Err
+		}
+		trace.Error = err.Error()
+		renderTrace(w, http.StatusBadGateway, trace)
 		return
 	}
 
-	data, err := redirectsBuff.ReadFile("partials/redirects.html")
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(fmt.Sprintf("Error: %v", err)))
-		return
-	}
-
-	t, err := template.New("redirects").Parse(string(data))
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte(fmt.Sprintf("Error: %v", err)))
-		return
-	}
-
-	defer resp.Body.Close()
-
-	w.Header().Set("Content-Type", "text/html")
-	w.Header().Set("X-Request-Sid", "2koODokX4qOX88Cm78iTT42SDcl")
-	w.WriteHeader(http.StatusOK)
-	t.Execute(w, redirects)
-
-	return
+	renderTrace(w, http.StatusOK, trace)
 }
 
 func main() {

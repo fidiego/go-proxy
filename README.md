@@ -10,8 +10,14 @@ Super simple http proxy.
 Example usage:
 
 ```bash
+# proxy a GET request
 curl localhost:8080/proxy\?url=https://www.example.com
+
+# trace a url's redirect chain (returns an html partial used by the index page)
+curl localhost:8080/redirect\?url=https://www.example.com
 ```
+
+Open `http://localhost:8080/` for the web UI.
 
 ## Development
 
